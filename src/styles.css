@@ -1,0 +1,720 @@
+:root {
+  --bg: #1b120f;
+  --surface: #2a1915;
+  --surface-alt: #3a241f;
+  --panel: rgba(33, 18, 14, 0.92);
+  --text: #f4e7cf;
+  --muted: #d4bc9a;
+  --gold: #d7a84b;
+  --gold-strong: #f0c96d;
+  --rose: #9a3d39;
+  --rose-strong: #ba4d46;
+  --border: rgba(240, 201, 109, 0.24);
+  --shadow: 0 18px 45px rgba(0, 0, 0, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  font-family: 'Inter', sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top, rgba(154, 61, 57, 0.24), transparent 22%),
+    linear-gradient(180deg, #120c0a 0%, #1d1411 45%, #261915 100%);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+img {
+  display: block;
+  width: 100%;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.hero,
+.section,
+.contact-page,
+.membership-page {
+  padding-inline: clamp(20px, 5vw, 72px);
+}
+
+.hero {
+  padding-top: 28px;
+  padding-bottom: 44px;
+  border-bottom: 1px solid var(--border);
+  background:
+    linear-gradient(rgba(11, 7, 6, 0.5), rgba(11, 7, 6, 0.7)),
+    linear-gradient(135deg, rgba(154, 61, 57, 0.12), transparent 60%);
+}
+
+.topbar,
+.hero-grid,
+.section,
+.contact-page,
+.membership-page {
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 52px;
+}
+
+.page-topbar {
+  margin-bottom: 36px;
+  gap: 16px;
+}
+
+.page-topbar h1 {
+  font-size: clamp(1.55rem, 2.2vw, 2.2rem);
+  white-space: nowrap;
+}
+
+.page-topbar .topbar-links {
+  flex-wrap: nowrap;
+  gap: 12px;
+  font-size: 0.95rem;
+}
+
+.page-topbar .topbar-links button {
+  white-space: nowrap;
+  font-size: 0.95rem;
+}
+
+.topbar h1,
+.hero h2,
+.section h2,
+.movie-card h3,
+.info-card h3,
+.merch-card h3,
+.account-preview h3,
+.membership-card h3,
+.contact-card h3,
+.contact-page h2,
+.membership-page h2 {
+  font-family: 'Cinzel', serif;
+  letter-spacing: 0.03em;
+  margin: 0;
+}
+
+.topbar h1 {
+  font-size: clamp(2rem, 4vw, 3.2rem);
+}
+
+.topbar-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  color: var(--muted);
+}
+
+.topbar-links a,
+.topbar-links button {
+  padding-bottom: 4px;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  cursor: pointer;
+}
+
+.topbar-links a:hover,
+.topbar-links button:hover {
+  color: var(--gold-strong);
+  border-color: var(--gold-strong);
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--gold);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.8fr);
+  gap: 30px;
+  align-items: start;
+}
+
+.hero-marquee {
+  width: calc((100vw - 32px) * 0.85);
+  max-width: none;
+  margin: -20px auto 24px;
+}
+
+.hero-marquee img {
+  width: 100%;
+  max-height: 462px;
+  object-fit: cover;
+  object-position: center top;
+  border-radius: 24px;
+}
+
+.hero h2 {
+  font-size: clamp(2.6rem, 5vw, 4.8rem);
+  line-height: 1.03;
+  max-width: 12ch;
+}
+
+.lead,
+.section-header > p,
+.movie-content p,
+.info-card p,
+.merch-card p,
+.member-note,
+.location-card p,
+.feedback,
+.account-preview p,
+.ticket-stat-card small,
+.contact-card p,
+.contact-page > p,
+.membership-page > p {
+  color: var(--muted);
+}
+
+.lead {
+  max-width: 65ch;
+  line-height: 1.8;
+  font-size: 1.04rem;
+  margin: 20px 0 0;
+}
+
+.hero-actions,
+.membership-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.hero-actions {
+  margin-top: 28px;
+}
+
+.button {
+  border: none;
+  border-radius: 999px;
+  min-height: 48px;
+  padding: 0 20px;
+  cursor: pointer;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+}
+
+.button:hover {
+  transform: translateY(-1px);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+}
+
+.button.primary {
+  background: linear-gradient(135deg, var(--rose), var(--rose-strong));
+  color: #fff8ea;
+  box-shadow: 0 10px 22px rgba(154, 61, 57, 0.35);
+}
+
+.button.secondary {
+  background: transparent;
+  color: var(--gold-strong);
+  border: 1px solid var(--border);
+}
+
+.button.small {
+  min-height: 40px;
+  padding: 0 16px;
+}
+
+.centered-button {
+  justify-content: center;
+  text-align: center;
+}
+
+.location-card,
+.membership-card,
+.movie-card,
+.ticket-panel,
+.info-card,
+.sponsor-card,
+.merch-card,
+.account-card,
+.account-preview,
+.contact-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.location-card {
+  margin-top: 24px;
+  padding: 18px 20px;
+  border-left: 4px solid var(--gold);
+  width: fit-content;
+}
+
+.membership-card {
+  border-radius: 26px;
+  padding: 26px;
+  background:
+    linear-gradient(180deg, rgba(58, 36, 31, 0.96), rgba(32, 19, 15, 0.98)),
+    var(--panel);
+  display: grid;
+  gap: 16px;
+}
+
+.membership-card ul,
+.membership-perk-list {
+  padding-left: 20px;
+  line-height: 1.85;
+  color: var(--muted);
+  margin: 0;
+}
+
+.price-tag {
+  font-size: 2rem;
+  color: var(--gold-strong);
+  margin: 0;
+  font-weight: 800;
+}
+
+.section {
+  padding-top: 46px;
+  padding-bottom: 8px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.section-header.left {
+  justify-content: start;
+}
+
+.movie-grid,
+.merch-grid,
+.sponsor-grid,
+.two-column-layout,
+.event-list,
+.cart-list,
+.ticket-meta-grid,
+.contact-grid,
+.charge-history,
+.split-form-grid,
+.single-column-grid {
+  display: grid;
+  gap: 20px;
+}
+
+.movie-grid {
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+.movie-card {
+  overflow: hidden;
+  border-radius: 24px;
+  display: flex;
+  flex-direction: column;
+}
+
+.movie-poster-frame {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  background:
+    linear-gradient(180deg, rgba(154, 61, 57, 0.45), rgba(27, 18, 15, 0.95)),
+    radial-gradient(circle at top, rgba(240, 201, 109, 0.24), transparent 55%);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.movie-card img {
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  height: 100%;
+}
+
+.movie-content {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.movie-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: start;
+}
+
+.movie-heading span,
+.card-date {
+  color: var(--gold-strong);
+  font-weight: 700;
+}
+
+.showtime-list {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0;
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  flex: 1;
+}
+
+.movie-footer,
+.merch-footer,
+.ticket-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+}
+
+.movie-actions {
+  align-items: stretch;
+  margin-top: auto;
+}
+
+.movie-actions strong {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+}
+
+.movie-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.movie-action-buttons .button {
+  min-width: 140px;
+}
+
+.ticket-section {
+  padding-top: 28px;
+}
+
+.ticket-panel,
+.account-card,
+.contact-card {
+  border-radius: 28px;
+  padding: 28px;
+}
+
+.ticket-form,
+.account-form,
+.verification-panel {
+  display: grid;
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.ticket-form label,
+.account-form label {
+  display: grid;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.ticket-form input,
+.ticket-form select,
+.account-form input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: rgba(15, 9, 8, 0.88);
+  color: var(--text);
+}
+
+.checkbox-row {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+}
+
+.checkbox-row input {
+  width: auto;
+}
+
+.ticket-meta-grid,
+.contact-grid,
+.charge-history {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.split-form-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.single-column-grid {
+  grid-template-columns: 1fr;
+}
+
+.ticket-stat-card {
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(215, 168, 75, 0.08);
+  display: grid;
+  gap: 6px;
+}
+
+.ticket-stat-card span {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.ticket-stat-card strong,
+.contact-card a {
+  color: var(--gold-strong);
+  font-size: 1.4rem;
+}
+
+.ticket-summary {
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(215, 168, 75, 0.08);
+  color: var(--gold-strong);
+}
+
+.cart-total-bar {
+  margin-top: 20px;
+}
+
+.two-column-layout {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.info-card,
+.sponsor-card,
+.merch-card,
+.account-preview {
+  border-radius: 22px;
+  padding: 22px;
+}
+
+.card-label {
+  color: var(--gold-strong) !important;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.8rem;
+}
+
+.sponsor-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.sponsor-card {
+  min-height: 120px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  font-family: 'Cinzel', serif;
+  font-size: 1.1rem;
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+
+.sponsor-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--gold-strong);
+}
+
+.merch-grid {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+}
+
+.merch-page-grid {
+  margin-top: 28px;
+}
+
+.merch-card {
+  display: grid;
+  gap: 14px;
+}
+
+.merch-image {
+  width: 100%;
+  aspect-ratio: 4 / 3.08;
+  object-fit: cover;
+  object-position: center top;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(15, 9, 8, 0.4);
+}
+
+.cart-list {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.verification-panel {
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(15, 9, 8, 0.42);
+}
+
+.contact-page,
+.membership-page {
+  padding-top: 46px;
+  padding-bottom: 60px;
+}
+
+.contact-page h2,
+.membership-page h2 {
+  font-size: clamp(2.2rem, 4vw, 3.4rem);
+  margin-bottom: 14px;
+}
+
+.membership-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.membership-summary-panel {
+  margin-top: 24px;
+  display: grid;
+  gap: 18px;
+}
+
+.contact-card {
+  display: grid;
+  gap: 12px;
+}
+
+.contact-card a {
+  font-size: 1rem;
+}
+
+.account-section {
+  padding-bottom: 60px;
+}
+
+.account-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(260px, 0.7fr);
+  gap: 22px;
+}
+
+.auth-account-card {
+  align-items: start;
+}
+
+.auth-preview-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.tab-row {
+  display: inline-flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(15, 9, 8, 0.42);
+}
+
+.tab-button {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  min-height: 40px;
+  padding: 0 18px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.tab-button.active {
+  color: #fff8ea;
+  background: linear-gradient(135deg, var(--rose), var(--rose-strong));
+}
+
+.feedback {
+  min-height: 24px;
+  margin: 0;
+  color: var(--gold-strong);
+  font-weight: 600;
+}
+
+@media (max-width: 920px) {
+  .topbar,
+  .section-header,
+  .hero-grid,
+  .account-card {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .topbar {
+    justify-content: stretch;
+  }
+
+  .page-topbar .topbar-links {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 640px) {
+  .movie-footer,
+  .merch-footer,
+  .ticket-summary,
+  .membership-actions-row {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .hero h2 {
+    max-width: none;
+  }
+
+  .tab-row {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
