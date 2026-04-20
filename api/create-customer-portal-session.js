@@ -1,4 +1,5 @@
 import Stripe from 'stripe';
+import { createClient } from '@supabase/supabase-js';
 
 function getStripeClient() {
   if (!process.env.STRIPE_SECRET_KEY) {
@@ -10,6 +11,37 @@ function getStripeClient() {
   });
 }
 
+function getAdminClient() {
+  if (!process.env.VITE_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error('Missing [VITE_SUPABASE_URL](.env.example) or [SUPABASE_SERVICE_ROLE_KEY](.env.example).');
+  }
+
+  return createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+}
+
+async function getSubscriptionRecord(adminClient, stripeCustomerId) {
+  const { data, error } = await adminClient
+    .from('subscriptions')
+    .select('stripe_customer_id, status')
+    .eq('stripe_customer_id', stripeCustomerId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    throw new Error('No subscription record was found for this Stripe customer.');
+  }
+
+  return data;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
@@ -18,6 +50,7 @@ export default async function handler(req, res) {
 
   try {
     const stripe = getStripeClient();
+    const adminClient = getAdminClient();
     const { stripeCustomerId } = req.body ?? {};
 
     if (!stripeCustomerId) {
@@ -27,6 +60,8 @@ export default async function handler(req, res) {
     if (!process.env.APP_BASE_URL) {
       return res.status(500).json({ error: 'Missing [APP_BASE_URL](.env.example).' });
     }
+
+    await getSubscriptionRecord(adminClient, stripeCustomerId);
 
     const session = await stripe.billingPortal.sessions.create({
       customer: stripeCustomerId,

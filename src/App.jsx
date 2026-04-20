@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { getSupabaseClient, hasSupabaseEnv } from './lib/supabase';
 import bttfPoster from './assets/BTTFImage.jpg';
 import gooniesPoster from './assets/GooniesImage.jpg';
 import etPoster from './assets/ETImage.jpg';
@@ -193,13 +194,86 @@ const initialBilling = {
   status: 'No active subscription',
   plan: 'Free Membership',
   charges: [],
-  customerPortalAvailable: true,
+  customerPortalAvailable: false,
+  stripeCustomerId: '',
 };
 
-const mockCharges = [
-  { id: 'inv_2026_001', date: '2026-03-01', amount: '$50.00', status: 'Paid' },
-  { id: 'inv_2026_002', date: '2026-04-01', amount: '$50.00', status: 'Paid' },
-];
+function formatMembershipStatus(membershipType) {
+  return membershipType === 'paid' ? 'paid' : 'free';
+}
+
+function formatBilling(subscription, membershipType) {
+  const isPaidMember = membershipType === 'paid';
+
+  return {
+    provider: 'Stripe',
+    status: subscription?.status || (isPaidMember ? 'Pending sync' : 'No active subscription'),
+    plan: isPaidMember ? membershipPlan.name : 'Free Membership',
+    charges: [],
+    customerPortalAvailable: Boolean(subscription?.stripe_customer_id),
+    stripeCustomerId: subscription?.stripe_customer_id || '',
+  };
+}
+
+async function ensureProfileRow(client, user, profileInput) {
+  const profilePayload = {
+    id: user.id,
+    email: user.email,
+    first_name: profileInput.firstName,
+    last_name: profileInput.lastName,
+    phone: profileInput.phone || null,
+  };
+
+  const { error } = await client.from('profiles').upsert(profilePayload, { onConflict: 'id' });
+
+  if (error) {
+    throw error;
+  }
+}
+
+async function loadAccountSnapshot(client, user) {
+  const [{ data: profileData, error: profileError }, { data: subscriptionData, error: subscriptionError }] = await Promise.all([
+    client.from('profiles').select('id, email, first_name, last_name, phone, membership_type').eq('id', user.id).maybeSingle(),
+    client
+      .from('subscriptions')
+      .select('stripe_customer_id, stripe_subscription_id, status, current_period_end, cancel_at_period_end, updated_at')
+      .eq('user_id', user.id)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  if (profileError) {
+    throw profileError;
+  }
+
+  if (subscriptionError) {
+    throw subscriptionError;
+  }
+
+  return {
+    profile: profileData,
+    subscription: subscriptionData,
+  };
+}
+
+async function fetchJson(url, payload) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Request failed.');
+  }
+
+  return data;
+}
 
 function App() {
   const [selectedMovie, setSelectedMovie] = useState(movies[0]);
@@ -214,13 +288,31 @@ function App() {
     return params.get('page') || 'home';
   });
   const [authMode, setAuthMode] = useState('signup');
-  const [authStatus, setAuthStatus] = useState('signed-out');
+  const [authStatus, setAuthStatus] = useState('loading');
   const [membershipStatus, setMembershipStatus] = useState('free');
-  const [authMessage, setAuthMessage] = useState('Connect Supabase to replace this local demo flow with live authentication.');
+  const [authMessage, setAuthMessage] = useState(
+    hasSupabaseEnv
+      ? 'Checking your account session...'
+      : 'Supabase environment variables are missing. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to enable account features.',
+  );
   const [profileMessage, setProfileMessage] = useState('');
-  const [billingMessage, setBillingMessage] = useState('Stripe billing is scaffolded and ready to connect to live endpoints.');
+  const [billingMessage, setBillingMessage] = useState(
+    hasSupabaseEnv
+      ? 'Stripe billing is ready once you sign in with a live account.'
+      : 'Complete Supabase environment setup before using Stripe account features.',
+  );
   const [profile, setProfile] = useState(initialProfile);
   const [billing, setBilling] = useState(initialBilling);
+  const [authFormValues, setAuthFormValues] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    password: '',
+  });
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [isProfileSaving, setIsProfileSaving] = useState(false);
+  const [isBillingLoading, setIsBillingLoading] = useState(false);
 
   const selectedDateDetails = useMemo(
     () => reservationDates.find((entry) => entry.value === selectedDate) ?? reservationDates[0],
@@ -252,6 +344,74 @@ function App() {
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
+    if (!hasSupabaseEnv) {
+      setAuthStatus('signed-out');
+      return undefined;
+    }
+
+    const client = getSupabaseClient();
+
+    const syncFromUser = async (user) => {
+      if (!user) {
+        setAuthStatus('signed-out');
+        setMembershipStatus('free');
+        setProfile(initialProfile);
+        setBilling(initialBilling);
+        setProfileMessage('');
+        setAuthMessage('Sign in or create an account to manage your membership.');
+        setBillingMessage('Sign in to start a Stripe upgrade or open the billing portal.');
+        return;
+      }
+
+      setAuthStatus('loading');
+
+      try {
+        const snapshot = await loadAccountSnapshot(client, user);
+        const profileRecord = snapshot.profile;
+        const nextMembershipStatus = formatMembershipStatus(profileRecord?.membership_type);
+
+        setProfile({
+          firstName: profileRecord?.first_name || user.user_metadata?.first_name || '',
+          lastName: profileRecord?.last_name || user.user_metadata?.last_name || '',
+          email: profileRecord?.email || user.email || '',
+          phone: profileRecord?.phone || user.user_metadata?.phone || '',
+        });
+        setMembershipStatus(nextMembershipStatus);
+        setBilling(formatBilling(snapshot.subscription, nextMembershipStatus));
+        setAuthStatus('signed-in');
+        setAuthMessage(`Signed in as ${user.email || 'your account'}.`);
+        setBillingMessage(
+          snapshot.subscription?.stripe_customer_id
+            ? 'Manage your payment methods and invoices through Stripe Customer Portal.'
+            : 'Upgrade to Moonlight Members Club to start Stripe billing.',
+        );
+      } catch (error) {
+        setAuthStatus('signed-in');
+        setAuthMessage(error.message || 'Signed in, but the account profile could not be loaded.');
+        setBillingMessage('Account loaded, but billing details could not be synced yet.');
+      }
+    };
+
+    client.auth.getSession().then(({ data, error }) => {
+      if (error) {
+        setAuthStatus('signed-out');
+        setAuthMessage(error.message || 'Unable to restore your session.');
+        return;
+      }
+
+      syncFromUser(data.session?.user ?? null);
+    });
+
+    const {
+      data: { subscription },
+    } = client.auth.onAuthStateChange((_event, session) => {
+      syncFromUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const openPage = (page) => {
@@ -301,8 +461,113 @@ function App() {
     );
   };
 
-  const handleAuthSubmit = (event) => {
+  const handleAuthFieldChange = (event) => {
+    const { name, value } = event.target;
+
+    setAuthFormValues((current) => ({
+      ...current,
+      [name]: value,
+    }));
+  };
+
+  const handleAuthSubmit = async (event) => {
     event.preventDefault();
+
+    if (!hasSupabaseEnv) {
+      setAuthMessage('Supabase environment variables are missing. Add them before using account features.');
+      return;
+    }
+
+    const formData = new FormData(event.currentTarget);
+    const nextProfile = {
+      firstName: String(formData.get('firstName') || '').trim(),
+      lastName: String(formData.get('lastName') || '').trim(),
+      email: String(formData.get('email') || '').trim(),
+      phone: String(formData.get('phone') || '').trim(),
+      password: String(formData.get('password') || ''),
+    };
+
+    const client = getSupabaseClient();
+
+    setIsAuthLoading(true);
+    setAuthMessage(authMode === 'signup' ? 'Creating your account...' : 'Signing you in...');
+    setProfileMessage('');
+
+    try {
+      if (authMode === 'signup') {
+        const { data, error } = await client.auth.signUp({
+          email: nextProfile.email,
+          password: nextProfile.password,
+          options: {
+            data: {
+              first_name: nextProfile.firstName,
+              last_name: nextProfile.lastName,
+              phone: nextProfile.phone,
+            },
+          },
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        if (data.user && data.session) {
+          await ensureProfileRow(client, data.user, nextProfile);
+          setAuthMessage(`Account created for ${nextProfile.firstName || 'member'}.`);
+        } else {
+          setAuthMessage(`Account created for ${nextProfile.email}. Check your email to confirm your address, then sign in.`);
+        }
+
+        setAuthFormValues({
+          firstName: '',
+          lastName: '',
+          email: nextProfile.email,
+          phone: '',
+          password: '',
+        });
+      } else {
+        const { data, error } = await client.auth.signInWithPassword({
+          email: nextProfile.email,
+          password: nextProfile.password,
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        setAuthMessage(`Welcome back, ${data.user?.email || nextProfile.email}.`);
+        setAuthFormValues((current) => ({
+          ...current,
+          email: nextProfile.email,
+          password: '',
+        }));
+      }
+    } catch (error) {
+      setAuthMessage(error.message || 'Unable to complete authentication.');
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  const handleProfileSave = async (event) => {
+    event.preventDefault();
+
+    if (!hasSupabaseEnv) {
+      setProfileMessage('Supabase environment variables are missing.');
+      return;
+    }
+
+    const client = getSupabaseClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await client.auth.getUser();
+
+    if (userError || !user) {
+      setProfileMessage(userError?.message || 'You must be signed in to save profile changes.');
+      return;
+    }
+
     const formData = new FormData(event.currentTarget);
     const nextProfile = {
       firstName: String(formData.get('firstName') || '').trim(),
@@ -311,60 +576,119 @@ function App() {
       phone: String(formData.get('phone') || '').trim(),
     };
 
-    setProfile(nextProfile);
-    setAuthStatus('signed-in');
-    setMembershipStatus('free');
-    setBilling(initialBilling);
-    setProfileMessage('');
+    setIsProfileSaving(true);
+    setProfileMessage('Saving profile changes...');
 
-    if (authMode === 'signup') {
-      setAuthMessage(
-        `Demo signup complete for ${nextProfile.firstName || 'member'}. Connect [src/lib/supabase.js](src/lib/supabase.js) to replace this with real Supabase auth.`,
+    try {
+      const { error } = await client.from('profiles').upsert(
+        {
+          id: user.id,
+          email: nextProfile.email,
+          first_name: nextProfile.firstName,
+          last_name: nextProfile.lastName,
+          phone: nextProfile.phone || null,
+        },
+        { onConflict: 'id' },
       );
-    } else {
-      setAuthMessage(
-        `Demo sign-in complete for ${nextProfile.email || 'your account'}. Replace this local state flow with Supabase session handling.`,
-      );
+
+      if (error) {
+        throw error;
+      }
+
+      setProfile(nextProfile);
+      setProfileMessage('Profile updated successfully.');
+    } catch (error) {
+      setProfileMessage(error.message || 'Unable to save profile changes.');
+    } finally {
+      setIsProfileSaving(false);
     }
   };
 
-  const handleProfileSave = (event) => {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-
-    setProfile({
-      firstName: String(formData.get('firstName') || '').trim(),
-      lastName: String(formData.get('lastName') || '').trim(),
-      email: String(formData.get('email') || '').trim(),
-      phone: String(formData.get('phone') || '').trim(),
-    });
-
-    setProfileMessage('Profile changes saved in the local UI. Connect this form to Supabase profile persistence next.');
-  };
-
   const handleUpgrade = async () => {
-    setBillingMessage('Upgrade flow placeholder triggered. Connect this button to [/api/create-checkout-session.js](api/create-checkout-session.js) after adding live keys.');
-    setMembershipStatus('paid');
-    setBilling({
-      provider: 'Stripe',
-      status: 'Active',
-      plan: membershipPlan.name,
-      charges: mockCharges,
-      customerPortalAvailable: true,
-    });
+    if (!hasSupabaseEnv) {
+      setBillingMessage('Supabase environment variables are missing.');
+      return;
+    }
+
+    const client = getSupabaseClient();
+    const {
+      data: { user },
+      error,
+    } = await client.auth.getUser();
+
+    if (error || !user) {
+      setBillingMessage(error?.message || 'Sign in before starting a Stripe checkout session.');
+      openPage('membership');
+      return;
+    }
+
+    setIsBillingLoading(true);
+    setBillingMessage('Creating your Stripe Checkout session...');
+
+    try {
+      const data = await fetchJson('/api/create-checkout-session', {
+        customerEmail: user.email,
+        userId: user.id,
+      });
+
+      if (!data.url) {
+        throw new Error('Stripe checkout did not return a redirect URL.');
+      }
+
+      window.location.assign(data.url);
+    } catch (requestError) {
+      setBillingMessage(requestError.message || 'Unable to start the Stripe checkout flow.');
+      setIsBillingLoading(false);
+    }
   };
 
   const handleManageBilling = async () => {
-    setBillingMessage('Customer portal placeholder triggered. Connect this button to [/api/create-customer-portal-session.js](api/create-customer-portal-session.js) when Stripe is configured.');
+    if (!hasSupabaseEnv) {
+      setBillingMessage('Supabase environment variables are missing.');
+      return;
+    }
+
+    if (!billing.stripeCustomerId) {
+      setBillingMessage('No Stripe customer record is available yet. Complete a paid checkout first.');
+      return;
+    }
+
+    setIsBillingLoading(true);
+    setBillingMessage('Opening Stripe Customer Portal...');
+
+    try {
+      const data = await fetchJson('/api/create-customer-portal-session', {
+        stripeCustomerId: billing.stripeCustomerId,
+      });
+
+      if (!data.url) {
+        throw new Error('Stripe customer portal did not return a redirect URL.');
+      }
+
+      window.location.assign(data.url);
+    } catch (requestError) {
+      setBillingMessage(requestError.message || 'Unable to open the Stripe customer portal.');
+      setIsBillingLoading(false);
+    }
   };
 
-  const handleSignOut = () => {
-    setAuthStatus('signed-out');
-    setMembershipStatus('free');
-    setProfile(initialProfile);
-    setBilling(initialBilling);
-    setAuthMessage('Signed out of the local demo session. Replace this with Supabase signOut in production.');
+  const handleSignOut = async () => {
+    if (!hasSupabaseEnv) {
+      setAuthStatus('signed-out');
+      return;
+    }
+
+    const client = getSupabaseClient();
+    const { error } = await client.auth.signOut();
+
+    if (error) {
+      setAuthMessage(error.message || 'Unable to sign out.');
+      return;
+    }
+
+    setAuthMessage('Signed out successfully.');
     setProfileMessage('');
+    setBillingMessage('Sign in to start a Stripe upgrade or open the billing portal.');
   };
 
   const topNavigation = (
@@ -513,12 +837,12 @@ function App() {
           <div className="contact-grid membership-grid">
             <article className="contact-card">
               <p className="card-label">Authentication</p>
-              <h3>{authStatus === 'signed-in' ? 'Signed in' : 'Signed out'}</h3>
+              <h3>{authStatus === 'signed-in' ? 'Signed in' : authStatus === 'loading' ? 'Loading session' : 'Signed out'}</h3>
               <p>
                 <strong>Email:</strong> {profile.email || 'No account connected'}
               </p>
               <p>
-                <strong>Password:</strong> Managed by Supabase Auth once connected
+                <strong>Password:</strong> Managed by Supabase Auth
               </p>
             </article>
 
@@ -556,12 +880,12 @@ function App() {
             )}
             <div className="membership-actions-row">
               {!isPaidMember ? (
-                <button className="button primary" type="button" onClick={handleUpgrade}>
-                  Upgrade with Stripe
+                <button className="button primary" type="button" onClick={handleUpgrade} disabled={isBillingLoading || authStatus !== 'signed-in'}>
+                  {isBillingLoading ? 'Opening Checkout...' : 'Upgrade with Stripe'}
                 </button>
               ) : null}
-              <button className="button secondary" type="button" onClick={handleManageBilling}>
-                Manage Billing
+              <button className="button secondary" type="button" onClick={handleManageBilling} disabled={isBillingLoading || !billing.customerPortalAvailable}>
+                {isBillingLoading ? 'Opening Portal...' : 'Manage Billing'}
               </button>
               {authStatus === 'signed-in' ? (
                 <button className="button secondary" type="button" onClick={handleSignOut}>
@@ -645,8 +969,8 @@ function App() {
               <button className="button primary small" type="button" onClick={() => openPage('membership')}>
                 View Membership
               </button>
-              <button className="button secondary small" type="button" onClick={handleUpgrade}>
-                Preview Upgrade
+              <button className="button secondary small" type="button" onClick={handleUpgrade} disabled={isBillingLoading || authStatus !== 'signed-in'}>
+                {isBillingLoading ? 'Opening...' : 'Upgrade Now'}
               </button>
             </div>
             <p className="feedback">{billingMessage}</p>
@@ -905,11 +1229,11 @@ function App() {
                   <div className="split-form-grid">
                     <label>
                       First name
-                      <input name="firstName" type="text" placeholder="Jamie" required />
+                      <input name="firstName" type="text" placeholder="Jamie" required value={authFormValues.firstName} onChange={handleAuthFieldChange} />
                     </label>
                     <label>
                       Last name
-                      <input name="lastName" type="text" placeholder="Monroe" required />
+                      <input name="lastName" type="text" placeholder="Monroe" required value={authFormValues.lastName} onChange={handleAuthFieldChange} />
                     </label>
                   </div>
                 ) : null}
@@ -917,23 +1241,23 @@ function App() {
                 <div className={authMode === 'signup' ? 'split-form-grid' : 'single-column-grid'}>
                   <label>
                     Email address
-                    <input name="email" type="email" placeholder="jamie@example.com" required />
+                    <input name="email" type="email" placeholder="jamie@example.com" required value={authFormValues.email} onChange={handleAuthFieldChange} />
                   </label>
                   {authMode === 'signup' ? (
                     <label>
                       Phone number
-                      <input name="phone" type="tel" placeholder="(352) 555-0147" />
+                      <input name="phone" type="tel" placeholder="(352) 555-0147" value={authFormValues.phone} onChange={handleAuthFieldChange} />
                     </label>
                   ) : null}
                 </div>
 
                 <label>
                   Password
-                  <input name="password" type="password" placeholder="Create a secure password" required />
+                  <input name="password" type="password" placeholder="Create a secure password" required value={authFormValues.password} onChange={handleAuthFieldChange} />
                 </label>
 
-                <button className="button primary" type="submit">
-                  {authMode === 'signup' ? 'Create Account' : 'Sign In'}
+                <button className="button primary" type="submit" disabled={isAuthLoading || authStatus === 'loading'}>
+                  {isAuthLoading ? (authMode === 'signup' ? 'Creating Account...' : 'Signing In...') : authMode === 'signup' ? 'Create Account' : 'Sign In'}
                 </button>
                 <p className="feedback">{authMessage}</p>
               </form>
@@ -969,32 +1293,32 @@ function App() {
                     <p className="eyebrow">Profile Management</p>
                     <h2>Update account details</h2>
                   </div>
-                  <p>These fields map directly to the planned [profiles](plans/supabase-stripe-vercel-plan.md) table structure.</p>
+                  <p>These fields map directly to the planned profiles table structure.</p>
                 </div>
 
                 <form className="account-form" onSubmit={handleProfileSave}>
                   <div className="split-form-grid">
                     <label>
                       First name
-                      <input name="firstName" type="text" defaultValue={profile.firstName} required />
+                      <input name="firstName" type="text" value={profile.firstName} onChange={(event) => setProfile((current) => ({ ...current, firstName: event.target.value }))} required />
                     </label>
                     <label>
                       Last name
-                      <input name="lastName" type="text" defaultValue={profile.lastName} required />
+                      <input name="lastName" type="text" value={profile.lastName} onChange={(event) => setProfile((current) => ({ ...current, lastName: event.target.value }))} required />
                     </label>
                   </div>
                   <div className="split-form-grid">
                     <label>
                       Email
-                      <input name="email" type="email" defaultValue={profile.email} required />
+                      <input name="email" type="email" value={profile.email} onChange={(event) => setProfile((current) => ({ ...current, email: event.target.value }))} required />
                     </label>
                     <label>
                       Phone
-                      <input name="phone" type="tel" defaultValue={profile.phone} />
+                      <input name="phone" type="tel" value={profile.phone} onChange={(event) => setProfile((current) => ({ ...current, phone: event.target.value }))} />
                     </label>
                   </div>
-                  <button className="button primary" type="submit">
-                    Save Profile
+                  <button className="button primary" type="submit" disabled={isProfileSaving}>
+                    {isProfileSaving ? 'Saving Profile...' : 'Save Profile'}
                   </button>
                   <p className="feedback">{profileMessage}</p>
                 </form>
