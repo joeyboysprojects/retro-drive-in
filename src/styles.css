@@ -662,6 +662,11 @@ img {
   margin-bottom: 14px;
 }
 
+.account-subheading {
+  font-size: clamp(1.3rem, 2vw, 1.75rem);
+  margin: 0;
+}
+
 .membership-grid {
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
