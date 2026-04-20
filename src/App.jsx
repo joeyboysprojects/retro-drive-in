@@ -105,30 +105,35 @@ const merchandise = [
     price: '$28',
     description: 'Soft cotton shirt with a retro neon marquee print.',
     image: hollywoodShirtImage,
+    stockStatus: 'Out of stock',
   },
   {
     name: 'Hollywood-Themed Hat',
     price: '$24',
     description: 'Vintage washed baseball cap with gold stitched emblem.',
     image: hollywoodHatImage,
+    stockStatus: 'Out of stock',
   },
   {
     name: 'Hollywood-Themed Coffee Mug',
     price: '$18',
     description: 'Ceramic coffee mug inspired by classic silver-screen posters.',
     image: hollywoodMugImage,
+    stockStatus: 'Out of stock',
   },
   {
     name: 'Hollywood-Themed Hoodie',
     price: '$52',
     description: 'Cozy pullover made for late Gainesville movie nights.',
     image: hollywoodHoodieImage,
+    stockStatus: 'Out of stock',
   },
   {
     name: '1920s Gatsby Style Silver Fringe',
     price: '$36',
     description: 'Silver fringe accessory with roaring-twenties glamour for themed movie nights.',
     image: gatsbyFringeImage,
+    stockStatus: 'Out of stock',
   },
 ];
 
@@ -257,6 +262,22 @@ async function loadAccountSnapshot(client, user) {
   };
 }
 
+async function ensureProfileFromSession(client, user) {
+  const snapshot = await loadAccountSnapshot(client, user);
+
+  if (snapshot.profile) {
+    return snapshot;
+  }
+
+  await ensureProfileRow(client, user, {
+    firstName: user.user_metadata?.first_name || '',
+    lastName: user.user_metadata?.last_name || '',
+    phone: user.user_metadata?.phone || '',
+  });
+
+  return loadAccountSnapshot(client, user);
+}
+
 async function fetchJson(url, payload) {
   const response = await fetch(url, {
     method: 'POST',
@@ -281,6 +302,8 @@ function App() {
   const [cartItems, setCartItems] = useState([]);
   const [cartMessage, setCartMessage] = useState('');
   const [ticketMessage, setTicketMessage] = useState('');
+  const [merchAlertMessage, setMerchAlertMessage] = useState('');
+  const [merchAlertSelections, setMerchAlertSelections] = useState({});
   const [selectedDate, setSelectedDate] = useState(reservationDates[0].value);
   const [selectedTime, setSelectedTime] = useState(reservationDates[0].times[0]);
   const [currentPage, setCurrentPage] = useState(() => {
@@ -312,7 +335,12 @@ function App() {
   });
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [isProfileSaving, setIsProfileSaving] = useState(false);
+  const [isPasswordSaving, setIsPasswordSaving] = useState(false);
   const [isBillingLoading, setIsBillingLoading] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    newPassword: '',
+    confirmPassword: '',
+  });
 
   const selectedDateDetails = useMemo(
     () => reservationDates.find((entry) => entry.value === selectedDate) ?? reservationDates[0],
@@ -369,7 +397,7 @@ function App() {
       setAuthStatus('loading');
 
       try {
-        const snapshot = await loadAccountSnapshot(client, user);
+        const snapshot = await ensureProfileFromSession(client, user);
         const profileRecord = snapshot.profile;
         const nextMembershipStatus = formatMembershipStatus(profileRecord?.membership_type);
 
@@ -421,6 +449,12 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleHomeNavigation = () => {
+    window.history.pushState({ page: 'home' }, '', window.location.pathname);
+    setCurrentPage('home');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const navigateToSection = (sectionId) => {
     if (currentPage !== 'home') {
       window.history.pushState({ page: 'home' }, '', window.location.pathname);
@@ -438,6 +472,20 @@ function App() {
   const addToCart = (item) => {
     setCartItems((currentItems) => [...currentItems, item]);
     setCartMessage(`${item.name} added to cart.`);
+  };
+
+  const handleMerchBackInStockAlert = (itemName) => {
+    if (authStatus !== 'signed-in' || !profile.email) {
+      setMerchAlertMessage('Sign in or create an account to receive back-in-stock email alerts.');
+      openPage('membership');
+      return;
+    }
+
+    setMerchAlertSelections((current) => ({
+      ...current,
+      [itemName]: true,
+    }));
+    setMerchAlertMessage(`Back-in-stock email alerts enabled for ${itemName}. We will notify ${profile.email} when it becomes available.`);
   };
 
   const handleTicketPurchase = (event) => {
@@ -580,6 +628,33 @@ function App() {
     setProfileMessage('Saving profile changes...');
 
     try {
+      if (nextProfile.email !== user.email) {
+        const { error: authUpdateError } = await client.auth.updateUser({
+          email: nextProfile.email,
+          data: {
+            first_name: nextProfile.firstName,
+            last_name: nextProfile.lastName,
+            phone: nextProfile.phone,
+          },
+        });
+
+        if (authUpdateError) {
+          throw authUpdateError;
+        }
+      } else {
+        const { error: metadataError } = await client.auth.updateUser({
+          data: {
+            first_name: nextProfile.firstName,
+            last_name: nextProfile.lastName,
+            phone: nextProfile.phone,
+          },
+        });
+
+        if (metadataError) {
+          throw metadataError;
+        }
+      }
+
       const { error } = await client.from('profiles').upsert(
         {
           id: user.id,
@@ -596,11 +671,64 @@ function App() {
       }
 
       setProfile(nextProfile);
-      setProfileMessage('Profile updated successfully.');
+      setProfileMessage(
+        nextProfile.email !== user.email
+          ? 'Profile updated. Check your email to confirm the new address if Supabase requires email change confirmation.'
+          : 'Profile updated successfully.',
+      );
     } catch (error) {
       setProfileMessage(error.message || 'Unable to save profile changes.');
     } finally {
       setIsProfileSaving(false);
+    }
+  };
+
+  const handlePasswordChange = async (event) => {
+    event.preventDefault();
+
+    if (!hasSupabaseEnv) {
+      setProfileMessage('Supabase environment variables are missing.');
+      return;
+    }
+
+    if (!passwordForm.newPassword || !passwordForm.confirmPassword) {
+      setProfileMessage('Enter and confirm your new password.');
+      return;
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setProfileMessage('New password and confirmation do not match.');
+      return;
+    }
+
+    if (passwordForm.newPassword.length < 8) {
+      setProfileMessage('Use at least 8 characters for the new password.');
+      return;
+    }
+
+    const client = getSupabaseClient();
+
+    setIsPasswordSaving(true);
+    setProfileMessage('Updating password...');
+
+    try {
+      const { error } = await client.auth.updateUser({
+        password: passwordForm.newPassword,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setPasswordForm({
+        newPassword: '',
+        confirmPassword: '',
+      });
+      setProfileMessage('Password updated successfully.');
+    } catch (error) {
+      setProfileMessage(error.message || 'Unable to update password.');
+    } finally {
+      setIsPasswordSaving(false);
     }
   };
 
@@ -695,7 +823,9 @@ function App() {
     <nav className="topbar page-topbar">
       <div>
         <p className="eyebrow">Gainesville, Florida</p>
-        <h1>Starlite Drive-In</h1>
+        <button type="button" className="brand-button" onClick={handleHomeNavigation}>
+          <h1>Starlite Drive-In</h1>
+        </button>
       </div>
       <div className="topbar-links">
         <button type="button" onClick={() => navigateToSection('showings')}>
@@ -772,15 +902,25 @@ function App() {
                 <img className="merch-image" src={item.image} alt={item.name} />
                 <h3>{item.name}</h3>
                 <p>{item.description}</p>
-                <div className="merch-footer">
+                <p className="stock-status">{item.stockStatus}</p>
+                <div className="merch-footer merch-footer-stacked">
                   <strong>{item.price}</strong>
-                  <button className="button secondary small" type="button" onClick={() => addToCart({ id: `merch-${item.name}`, type: 'Merch', name: item.name, details: item.description, price: item.price.replace('$', '') })}>
-                    Add to Bag
+                  <button className="button secondary small" type="button" disabled>
+                    Out of Stock
                   </button>
                 </div>
+                <button
+                  className="button primary small merch-alert-button"
+                  type="button"
+                  onClick={() => handleMerchBackInStockAlert(item.name)}
+                  disabled={Boolean(merchAlertSelections[item.name])}
+                >
+                  {merchAlertSelections[item.name] ? 'Email Alert Enabled' : 'Email Me When Back in Stock'}
+                </button>
               </article>
             ))}
           </div>
+          <p className="feedback">{merchAlertMessage}</p>
         </div>
       </div>
     );
@@ -906,7 +1046,9 @@ function App() {
         <nav className="topbar">
           <div>
             <p className="eyebrow">Gainesville, Florida</p>
-            <h1>Starlite Drive-In</h1>
+            <button type="button" className="brand-button" onClick={handleHomeNavigation}>
+              <h1>Starlite Drive-In</h1>
+            </button>
           </div>
           <div className="topbar-links">
             <button type="button" onClick={() => navigateToSection('showings')}>
@@ -1319,6 +1461,43 @@ function App() {
                   </div>
                   <button className="button primary" type="submit" disabled={isProfileSaving}>
                     {isProfileSaving ? 'Saving Profile...' : 'Save Profile'}
+                  </button>
+                </form>
+
+                <form className="account-form account-password-form" onSubmit={handlePasswordChange}>
+                  <div className="section-header left marquee-header compact-section-header">
+                    <div>
+                      <p className="eyebrow">Password</p>
+                      <h2>Change your password</h2>
+                    </div>
+                    <p>Update your Supabase Auth password without leaving the membership page.</p>
+                  </div>
+                  <div className="split-form-grid">
+                    <label>
+                      New password
+                      <input
+                        name="newPassword"
+                        type="password"
+                        value={passwordForm.newPassword}
+                        onChange={(event) => setPasswordForm((current) => ({ ...current, newPassword: event.target.value }))}
+                        minLength="8"
+                        required
+                      />
+                    </label>
+                    <label>
+                      Confirm new password
+                      <input
+                        name="confirmPassword"
+                        type="password"
+                        value={passwordForm.confirmPassword}
+                        onChange={(event) => setPasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))}
+                        minLength="8"
+                        required
+                      />
+                    </label>
+                  </div>
+                  <button className="button secondary" type="submit" disabled={isPasswordSaving}>
+                    {isPasswordSaving ? 'Updating Password...' : 'Update Password'}
                   </button>
                   <p className="feedback">{profileMessage}</p>
                 </form>

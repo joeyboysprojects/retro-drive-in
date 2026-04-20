@@ -125,6 +125,20 @@ img {
   font-size: clamp(2rem, 4vw, 3.2rem);
 }
 
+.brand-button {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.brand-button:hover h1,
+.brand-button:focus-visible h1 {
+  color: var(--gold-strong);
+}
+
 .topbar-links {
   display: flex;
   flex-wrap: wrap;
@@ -214,6 +228,14 @@ img {
   display: flex;
   flex-wrap: wrap;
   gap: 14px;
+}
+
+.account-password-form {
+  margin-top: 28px;
+}
+
+.compact-section-header {
+  margin-bottom: 18px;
 }
 
 .hero-actions {
@@ -576,6 +598,22 @@ img {
 .merch-card {
   display: grid;
   gap: 14px;
+}
+
+.stock-status {
+  margin: 0;
+  color: var(--gold-strong);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.merch-footer-stacked {
+  align-items: center;
+}
+
+.merch-alert-button {
+  width: 100%;
 }
 
 .merch-image {
