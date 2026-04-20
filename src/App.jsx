@@ -337,10 +337,12 @@ function App() {
   const [isProfileSaving, setIsProfileSaving] = useState(false);
   const [isPasswordSaving, setIsPasswordSaving] = useState(false);
   const [isBillingLoading, setIsBillingLoading] = useState(false);
+  const [isPasswordResetSending, setIsPasswordResetSending] = useState(false);
   const [passwordForm, setPasswordForm] = useState({
     newPassword: '',
     confirmPassword: '',
   });
+  const [passwordResetEmail, setPasswordResetEmail] = useState('');
 
   const selectedDateDetails = useMemo(
     () => reservationDates.find((entry) => entry.value === selectedDate) ?? reservationDates[0],
@@ -452,6 +454,15 @@ function App() {
   const handleHomeNavigation = () => {
     window.history.pushState({ page: 'home' }, '', window.location.pathname);
     setCurrentPage('home');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const openPasswordResetPage = () => {
+    window.history.pushState({ page: 'reset-password' }, '', `${window.location.pathname}?page=reset-password`);
+    setCurrentPage('reset-password');
+    setPasswordResetEmail(profile.email || authFormValues.email || '');
+    setProfileMessage('');
+    setAuthMessage('Enter your email address to receive a password reset link.');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -732,6 +743,41 @@ function App() {
     }
   };
 
+  const handlePasswordResetRequest = async (event) => {
+    event.preventDefault();
+
+    if (!hasSupabaseEnv) {
+      setAuthMessage('Supabase environment variables are missing.');
+      return;
+    }
+
+    if (!passwordResetEmail.trim()) {
+      setAuthMessage('Enter an email address to receive the password reset link.');
+      return;
+    }
+
+    const client = getSupabaseClient();
+
+    setIsPasswordResetSending(true);
+    setAuthMessage('Sending password reset link...');
+
+    try {
+      const { error } = await client.auth.resetPasswordForEmail(passwordResetEmail.trim(), {
+        redirectTo: `${window.location.origin}?page=membership`,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setAuthMessage(`Password reset link sent to ${passwordResetEmail.trim()}.`);
+    } catch (error) {
+      setAuthMessage(error.message || 'Unable to send password reset link.');
+    } finally {
+      setIsPasswordResetSending(false);
+    }
+  };
+
   const handleUpgrade = async () => {
     if (!hasSupabaseEnv) {
       setBillingMessage('Supabase environment variables are missing.');
@@ -972,7 +1018,7 @@ function App() {
           {topNavigation}
           <p className="eyebrow">Membership</p>
           <h2>Your account and membership details</h2>
-          <p>Review your profile, membership tier, and billing management entry points.</p>
+          <p>Review your profile, membership tier, billing management entry points, and account settings.</p>
 
           <div className="contact-grid membership-grid">
             <article className="contact-card">
@@ -1034,6 +1080,140 @@ function App() {
               ) : null}
             </div>
             <p className="feedback">{billingMessage}</p>
+          </div>
+
+          {authStatus === 'signed-in' ? (
+            <section className="section account-section membership-account-section">
+              <div className="account-card marquee-panel auth-account-card">
+                <div>
+                  <div className="section-header left marquee-header">
+                    <div>
+                      <p className="eyebrow">Profile Management</p>
+                      <h2>Update account details</h2>
+                    </div>
+                    <p>These fields map directly to your live Supabase account profile.</p>
+                  </div>
+
+                  <form className="account-form" onSubmit={handleProfileSave}>
+                    <div className="split-form-grid">
+                      <label>
+                        First name
+                        <input name="firstName" type="text" value={profile.firstName} onChange={(event) => setProfile((current) => ({ ...current, firstName: event.target.value }))} required />
+                      </label>
+                      <label>
+                        Last name
+                        <input name="lastName" type="text" value={profile.lastName} onChange={(event) => setProfile((current) => ({ ...current, lastName: event.target.value }))} required />
+                      </label>
+                    </div>
+                    <div className="split-form-grid">
+                      <label>
+                        Email
+                        <input name="email" type="email" value={profile.email} onChange={(event) => setProfile((current) => ({ ...current, email: event.target.value }))} required />
+                      </label>
+                      <label>
+                        Phone
+                        <input name="phone" type="tel" value={profile.phone} onChange={(event) => setProfile((current) => ({ ...current, phone: event.target.value }))} />
+                      </label>
+                    </div>
+                    <button className="button primary" type="submit" disabled={isProfileSaving}>
+                      {isProfileSaving ? 'Saving Profile...' : 'Save Profile'}
+                    </button>
+                  </form>
+
+                  <form className="account-form account-password-form" onSubmit={handlePasswordChange}>
+                    <div className="section-header left marquee-header compact-section-header">
+                      <div>
+                        <p className="eyebrow">Password</p>
+                        <h2>Change your password</h2>
+                      </div>
+                      <p>Update your Supabase Auth password without leaving the membership page.</p>
+                    </div>
+                    <div className="split-form-grid">
+                      <label>
+                        New password
+                        <input
+                          name="newPassword"
+                          type="password"
+                          value={passwordForm.newPassword}
+                          onChange={(event) => setPasswordForm((current) => ({ ...current, newPassword: event.target.value }))}
+                          minLength="8"
+                          required
+                        />
+                      </label>
+                      <label>
+                        Confirm new password
+                        <input
+                          name="confirmPassword"
+                          type="password"
+                          value={passwordForm.confirmPassword}
+                          onChange={(event) => setPasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))}
+                          minLength="8"
+                          required
+                        />
+                      </label>
+                    </div>
+                    <button className="button secondary" type="submit" disabled={isPasswordSaving}>
+                      {isPasswordSaving ? 'Updating Password...' : 'Update Password'}
+                    </button>
+                    <p className="feedback">{profileMessage}</p>
+                  </form>
+                </div>
+
+                <div className="account-preview auth-preview-panel">
+                  <h3>Member snapshot</h3>
+                  <p>
+                    <strong>Name:</strong> {[profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Not provided'}
+                  </p>
+                  <p>
+                    <strong>Email:</strong> {profile.email || 'Not provided'}
+                  </p>
+                  <p>
+                    <strong>Phone:</strong> {profile.phone || 'Not provided'}
+                  </p>
+                  <p>
+                    <strong>Membership:</strong> {membershipTierName}
+                  </p>
+                </div>
+              </div>
+            </section>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  if (currentPage === 'reset-password') {
+    return (
+      <div className="app-shell">
+        <div className="contact-page membership-page">
+          {topNavigation}
+          <p className="eyebrow">Password Reset</p>
+          <h2>Send a password reset link</h2>
+          <p>Enter the email address tied to your account and we will send a password reset link.</p>
+
+          <div className="account-card marquee-panel auth-account-card single-panel-layout">
+            <form className="account-form" onSubmit={handlePasswordResetRequest}>
+              <label>
+                Email address
+                <input
+                  name="passwordResetEmail"
+                  type="email"
+                  placeholder="jamie@example.com"
+                  value={passwordResetEmail}
+                  onChange={(event) => setPasswordResetEmail(event.target.value)}
+                  required
+                />
+              </label>
+              <div className="membership-actions-row">
+                <button className="button primary" type="submit" disabled={isPasswordResetSending}>
+                  {isPasswordResetSending ? 'Sending Reset Link...' : 'Send Password Reset Link'}
+                </button>
+                <button className="button secondary" type="button" onClick={() => navigateToSection('account')}>
+                  Back to Sign In
+                </button>
+              </div>
+              <p className="feedback">{authMessage}</p>
+            </form>
           </div>
         </div>
       </div>
@@ -1401,6 +1581,11 @@ function App() {
                 <button className="button primary" type="submit" disabled={isAuthLoading || authStatus === 'loading'}>
                   {isAuthLoading ? (authMode === 'signup' ? 'Creating Account...' : 'Signing In...') : authMode === 'signup' ? 'Create Account' : 'Sign In'}
                 </button>
+                {authMode === 'signin' ? (
+                  <button className="button secondary small inline-link-button" type="button" onClick={openPasswordResetPage}>
+                    Change password / reset password
+                  </button>
+                ) : null}
                 <p className="feedback">{authMessage}</p>
               </form>
             </div>
@@ -1426,101 +1611,6 @@ function App() {
           </div>
         </section>
 
-        {authStatus === 'signed-in' ? (
-          <section className="section account-section">
-            <div className="account-card marquee-panel auth-account-card">
-              <div>
-                <div className="section-header left marquee-header">
-                  <div>
-                    <p className="eyebrow">Profile Management</p>
-                    <h2>Update account details</h2>
-                  </div>
-                  <p>These fields map directly to the planned profiles table structure.</p>
-                </div>
-
-                <form className="account-form" onSubmit={handleProfileSave}>
-                  <div className="split-form-grid">
-                    <label>
-                      First name
-                      <input name="firstName" type="text" value={profile.firstName} onChange={(event) => setProfile((current) => ({ ...current, firstName: event.target.value }))} required />
-                    </label>
-                    <label>
-                      Last name
-                      <input name="lastName" type="text" value={profile.lastName} onChange={(event) => setProfile((current) => ({ ...current, lastName: event.target.value }))} required />
-                    </label>
-                  </div>
-                  <div className="split-form-grid">
-                    <label>
-                      Email
-                      <input name="email" type="email" value={profile.email} onChange={(event) => setProfile((current) => ({ ...current, email: event.target.value }))} required />
-                    </label>
-                    <label>
-                      Phone
-                      <input name="phone" type="tel" value={profile.phone} onChange={(event) => setProfile((current) => ({ ...current, phone: event.target.value }))} />
-                    </label>
-                  </div>
-                  <button className="button primary" type="submit" disabled={isProfileSaving}>
-                    {isProfileSaving ? 'Saving Profile...' : 'Save Profile'}
-                  </button>
-                </form>
-
-                <form className="account-form account-password-form" onSubmit={handlePasswordChange}>
-                  <div className="section-header left marquee-header compact-section-header">
-                    <div>
-                      <p className="eyebrow">Password</p>
-                      <h2>Change your password</h2>
-                    </div>
-                    <p>Update your Supabase Auth password without leaving the membership page.</p>
-                  </div>
-                  <div className="split-form-grid">
-                    <label>
-                      New password
-                      <input
-                        name="newPassword"
-                        type="password"
-                        value={passwordForm.newPassword}
-                        onChange={(event) => setPasswordForm((current) => ({ ...current, newPassword: event.target.value }))}
-                        minLength="8"
-                        required
-                      />
-                    </label>
-                    <label>
-                      Confirm new password
-                      <input
-                        name="confirmPassword"
-                        type="password"
-                        value={passwordForm.confirmPassword}
-                        onChange={(event) => setPasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))}
-                        minLength="8"
-                        required
-                      />
-                    </label>
-                  </div>
-                  <button className="button secondary" type="submit" disabled={isPasswordSaving}>
-                    {isPasswordSaving ? 'Updating Password...' : 'Update Password'}
-                  </button>
-                  <p className="feedback">{profileMessage}</p>
-                </form>
-              </div>
-
-              <div className="account-preview auth-preview-panel">
-                <h3>Member snapshot</h3>
-                <p>
-                  <strong>Name:</strong> {[profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Not provided'}
-                </p>
-                <p>
-                  <strong>Email:</strong> {profile.email || 'Not provided'}
-                </p>
-                <p>
-                  <strong>Phone:</strong> {profile.phone || 'Not provided'}
-                </p>
-                <p>
-                  <strong>Membership:</strong> {membershipTierName}
-                </p>
-              </div>
-            </div>
-          </section>
-        ) : null}
 
         <section className="section account-section">
           <div className="ticket-panel marquee-panel">

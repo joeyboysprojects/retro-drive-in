@@ -238,6 +238,19 @@ img {
   margin-bottom: 18px;
 }
 
+.inline-link-button {
+  width: fit-content;
+}
+
+.membership-account-section {
+  padding-inline: 0;
+  padding-bottom: 0;
+}
+
+.single-panel-layout {
+  max-width: 760px;
+}
+
 .hero-actions {
   margin-top: 28px;
 }
